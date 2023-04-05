@@ -17,16 +17,21 @@ func main() {
 	go validateOrders(receiveOrdersChan, validOrderChan, invalidOrderChan)
 
 	wg.Add(1)
-	go func(validOrderChan <-chan order) {
-		order := <-validOrderChan
-		fmt.Printf("valid order received: %v\n", order)
+
+	go func(
+		validOrderChan <-chan order,
+		invalidOrderChan <-chan invalidOrder,
+	) {
+		select {
+		case order := <-validOrderChan:
+			fmt.Printf("valid order received: %v\n", order)
+		case invalidOrder := <-invalidOrderChan:
+			fmt.Printf("inalid order received: %v, error: %v\n", invalidOrder.order, invalidOrder.err)
+		}
+
 		wg.Done()
-	}(validOrderChan)
-	go func(invalidOrderChan <-chan invalidOrder) {
-		order := <-invalidOrderChan
-		fmt.Printf("inalid order received: %v, error: %v\n", order.order, order.err)
-		wg.Done()
-	}(invalidOrderChan)
+	}(validOrderChan, invalidOrderChan)
+
 	wg.Wait()
 }
 
