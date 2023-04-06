@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 )
 
@@ -17,11 +16,9 @@ var rawOrders = []string{
 
 func main() {
 	var wg sync.WaitGroup
-	receiveOrdersChan := make(chan order)
-	validOrderChan := make(chan order)
-	invalidOrderChan := make(chan invalidOrder)
-	go receiveOrders(receiveOrdersChan, rawOrders)
-	go validateOrders(receiveOrdersChan, validOrderChan, invalidOrderChan)
+
+	receiveOrdersChan, _ := receiveOrders(rawOrders)
+	validOrderChan, invalidOrderChan := validateOrders(receiveOrdersChan)
 
 	wg.Add(1)
 	/*
@@ -57,27 +54,44 @@ func main() {
 	wg.Wait()
 }
 
-func receiveOrders(out chan<- order, rawOrders []string) {
-	for _, rawOrder := range rawOrders {
-		var newOrder order
-		err := json.Unmarshal([]byte(rawOrder), &newOrder)
-		if err != nil {
-			log.Print(err)
-			continue
+func receiveOrders(rawOrders []string) (<-chan order, <-chan error) {
+	out := make(chan order)
+	errChan := make(chan error)
+
+	go func() {
+		for _, rawOrder := range rawOrders {
+			var newOrder order
+			err := json.Unmarshal([]byte(rawOrder), &newOrder)
+			if err != nil {
+				errChan <- err
+			} else {
+				out <- newOrder
+			}
 		}
-		out <- newOrder
-	}
-	close(out)
+
+		close(out)
+		close(errChan)
+	}()
+
+	return out, errChan
 }
 
-func validateOrders(inChan <-chan order, outChan chan<- order, errChan chan<- invalidOrder) {
-	for order := range inChan {
-		if order.Quantity <= 0 {
-			errChan <- invalidOrder{order: order, err: errors.New("quantity must be greater than zero")}
-		} else {
-			outChan <- order
+func validateOrders(inChan <-chan order) (<-chan order, <-chan invalidOrder) {
+	validOrderChan := make(chan order)
+	invalidOrderChan := make(chan invalidOrder)
+
+	go func() {
+		for order := range inChan {
+			if order.Quantity <= 0 {
+				invalidOrderChan <- invalidOrder{order: order, err: errors.New("quantity must be greater than zero")}
+			} else {
+				validOrderChan <- order
+			}
 		}
-	}
-	close(outChan)
-	close(errChan)
+
+		close(validOrderChan)
+		close(invalidOrderChan)
+	}()
+
+	return validOrderChan, invalidOrderChan
 }
