@@ -21,7 +21,11 @@ func main() {
 	validOrderChan, invalidOrderChan := validateOrders(receiveOrdersChan)
 
 	wg.Add(1)
-	processOrders(validOrderChan, invalidOrderChan, func() { wg.Done() })
+	processOrders(processOrdersParams{
+		ValidOrderChan:   validOrderChan,
+		InvalidOrderChan: invalidOrderChan,
+		OnComplete:       func() { wg.Done() },
+	})
 	wg.Wait()
 }
 
@@ -67,21 +71,23 @@ func validateOrders(inChan <-chan order) (<-chan order, <-chan invalidOrder) {
 	return validOrderChan, invalidOrderChan
 }
 
-func processOrders(
-	validOrderChan <-chan order,
-	invalidOrderChan <-chan invalidOrder,
-	onComplete func(),
-) {
+type processOrdersParams struct {
+	ValidOrderChan   <-chan order
+	InvalidOrderChan <-chan invalidOrder
+	OnComplete       func()
+}
+
+func processOrders(params processOrdersParams) {
 loop:
 	for {
 		select {
-		case order, ok := <-validOrderChan:
+		case order, ok := <-params.ValidOrderChan:
 			if ok {
 				fmt.Printf("valid order received: %v\n", order)
 			} else {
 				break loop
 			}
-		case invalidOrder, ok := <-invalidOrderChan:
+		case invalidOrder, ok := <-params.InvalidOrderChan:
 			if ok {
 				fmt.Printf("inalid order received: %v, error: %v\n", invalidOrder.order, invalidOrder.err)
 			} else {
@@ -90,5 +96,5 @@ loop:
 		}
 	}
 
-	onComplete()
+	params.OnComplete()
 }
