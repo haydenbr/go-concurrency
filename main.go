@@ -21,36 +21,7 @@ func main() {
 	validOrderChan, invalidOrderChan := validateOrders(receiveOrdersChan)
 
 	wg.Add(1)
-	/*
-		wait group keeps the process running until we're done
-		normally, we might have an infinite loop or something in the main routine
-	*/
-
-	go func(
-		validOrderChan <-chan order,
-		invalidOrderChan <-chan invalidOrder,
-	) {
-	loop:
-		for {
-			select {
-			case order, ok := <-validOrderChan:
-				if ok {
-					fmt.Printf("valid order received: %v\n", order)
-				} else {
-					break loop
-				}
-			case invalidOrder, ok := <-invalidOrderChan:
-				if ok {
-					fmt.Printf("inalid order received: %v, error: %v\n", invalidOrder.order, invalidOrder.err)
-				} else {
-					break loop
-				}
-			}
-		}
-
-		wg.Done()
-	}(validOrderChan, invalidOrderChan)
-
+	processOrders(validOrderChan, invalidOrderChan, func() { wg.Done() })
 	wg.Wait()
 }
 
@@ -94,4 +65,30 @@ func validateOrders(inChan <-chan order) (<-chan order, <-chan invalidOrder) {
 	}()
 
 	return validOrderChan, invalidOrderChan
+}
+
+func processOrders(
+	validOrderChan <-chan order,
+	invalidOrderChan <-chan invalidOrder,
+	onComplete func(),
+) {
+loop:
+	for {
+		select {
+		case order, ok := <-validOrderChan:
+			if ok {
+				fmt.Printf("valid order received: %v\n", order)
+			} else {
+				break loop
+			}
+		case invalidOrder, ok := <-invalidOrderChan:
+			if ok {
+				fmt.Printf("inalid order received: %v, error: %v\n", invalidOrder.order, invalidOrder.err)
+			} else {
+				break loop
+			}
+		}
+	}
+
+	onComplete()
 }
