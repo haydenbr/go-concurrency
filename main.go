@@ -61,18 +61,20 @@ func validateOrders(inChan <-chan order) (<-chan order, <-chan invalidOrder) {
 	validOrderChan := make(chan order)
 	invalidOrderChan := make(chan invalidOrder)
 
-	go func() {
-		for order := range inChan {
-			if order.Quantity <= 0 {
-				invalidOrderChan <- invalidOrder{order: order, err: errors.New("quantity must be greater than zero")}
+	go processRecords(processRecordsParams[order]{
+		Records: inChan,
+		ProcessRecord: func(o order) {
+			if o.Quantity <= 0 {
+				invalidOrderChan <- invalidOrder{order: o, err: errors.New("quantity must be greater than zero")}
 			} else {
-				validOrderChan <- order
+				validOrderChan <- o
 			}
-		}
-
-		close(validOrderChan)
-		close(invalidOrderChan)
-	}()
+		},
+		OnComplete: func() {
+			close(validOrderChan)
+			close(invalidOrderChan)
+		},
+	})
 
 	return validOrderChan, invalidOrderChan
 }
@@ -84,13 +86,14 @@ func reserveInventory(in <-chan order) <-chan order {
 	const workers = 3
 	wg.Add(workers)
 	for i := 0; i < workers; i++ {
-		go func() {
-			for o := range in {
+		go processRecords(processRecordsParams[order]{
+			Records: in,
+			ProcessRecord: func(o order) {
 				o.Status = reserved
 				out <- o
-			}
-			wg.Done()
-		}()
+			},
+			OnComplete: wg.Done,
+		})
 	}
 
 	go func() {
