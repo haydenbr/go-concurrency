@@ -9,7 +9,9 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -25,21 +27,7 @@ func main() {
 				return
 			}
 		}
-		// done := ctx.Done()
-		// loop:
-		// 	for {
-		// 		select {
-		// 		case <-tick:
-		// 			fmt.Println("tick!")
-		// 		case <-done:
-		// 			wg.Done()
-		// 			break loop
-		// 		}
-		// 	}
 	}(ctx)
-
-	time.Sleep(2 * time.Second)
-	cancel()
 
 	wg.Wait()
 }
