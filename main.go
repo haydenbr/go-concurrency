@@ -8,7 +8,7 @@ import (
 )
 
 var rawOrders = []string{
-	`{"productCode": 1111, "quantity": 5, "status": 1}`,
+	`{"productCode": 1111, "quantity": -5, "status": 1}`,
 	`{"productCode": 2222, "quantity": 42.3, "status": 1}`,
 	`{"productCode": 3333, "quantity": 19, "status": 1}`,
 	`{"productCode": 4444, "quantity": 8, "status": 1}`,
@@ -22,7 +22,7 @@ func main() {
 	reservedOrderChan := reserveInventory(validOrderChan)
 	filledOrdersChan := fillOrders(reservedOrderChan)
 
-	wg.Add(1)
+	wg.Add(2)
 	go processRecords(processRecordsParams[invalidOrder]{
 		Records: invalidOrderChan,
 		ProcessRecord: func(o invalidOrder) {
@@ -31,7 +31,6 @@ func main() {
 		OnComplete: wg.Done,
 	})
 
-	wg.Add(1)
 	go processRecords(processRecordsParams[order]{
 		Records: filledOrdersChan,
 		ProcessRecord: func(o order) {
@@ -87,12 +86,22 @@ func validateOrders(inChan <-chan order) (<-chan order, <-chan invalidOrder) {
 
 func reserveInventory(in <-chan order) <-chan order {
 	out := make(chan order)
+	var wg sync.WaitGroup
+
+	const workers = 3
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			for o := range in {
+				o.Status = reserved
+				out <- o
+			}
+			wg.Done()
+		}()
+	}
 
 	go func() {
-		for o := range in {
-			o.Status = reserved
-			out <- o
-		}
+		wg.Wait()
 		close(out)
 	}()
 
