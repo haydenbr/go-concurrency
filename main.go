@@ -21,8 +21,7 @@ func main() {
 	validOrderChan, invalidOrderChan := validateOrders(receiveOrdersChan)
 	reservedOrderChan := reserveInventory(validOrderChan)
 
-	wg.Add(2)
-
+	wg.Add(1)
 	go processRecords(processRecordsParams[order]{
 		Records: reservedOrderChan,
 		ProcessRecord: func(o order) {
@@ -31,13 +30,18 @@ func main() {
 		OnComplete: wg.Done,
 	})
 
-	go processRecords(processRecordsParams[invalidOrder]{
-		Records: invalidOrderChan,
-		ProcessRecord: func(o invalidOrder) {
-			fmt.Printf("invalid order received: %v, error: %v\n", o.order, o.err)
-		},
-		OnComplete: wg.Done,
-	})
+	const workers = 3
+	wg.Add(workers)
+
+	for i := 0; i < workers; i++ {
+		go processRecords(processRecordsParams[invalidOrder]{
+			Records: invalidOrderChan,
+			ProcessRecord: func(o invalidOrder) {
+				fmt.Printf("invalid order received: %v, error: %v\n", o.order, o.err)
+			},
+			OnComplete: wg.Done,
+		})
+	}
 
 	wg.Wait()
 }
