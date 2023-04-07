@@ -20,9 +20,9 @@ func main() {
 	receiveOrdersChan, _ := receiveOrders(rawOrders)
 	validOrderChan, invalidOrderChan := validateOrders(receiveOrdersChan)
 	reservedOrderChan := reserveInventory(validOrderChan)
-	filledOrdersChan := fillOrders(reservedOrderChan)
+	filledOrdersWg := fillOrders(reservedOrderChan)
 
-	wg.Add(2)
+	wg.Add(1)
 	go processRecords(processRecordsParams[invalidOrder]{
 		Records: invalidOrderChan,
 		ProcessRecord: func(o invalidOrder) {
@@ -31,14 +31,7 @@ func main() {
 		OnComplete: wg.Done,
 	})
 
-	go processRecords(processRecordsParams[order]{
-		Records: filledOrdersChan,
-		ProcessRecord: func(o order) {
-			fmt.Printf("order filled: %v\n", o)
-		},
-		OnComplete: wg.Done,
-	})
-
+	filledOrdersWg.Wait()
 	wg.Wait()
 }
 
@@ -108,19 +101,23 @@ func reserveInventory(in <-chan order) <-chan order {
 	return out
 }
 
-func fillOrders(in <-chan order) <-chan order {
-	out := make(chan order)
+func fillOrders(in <-chan order) *sync.WaitGroup {
+	var wg sync.WaitGroup
+	const workers = 3
 
-	go processRecords(processRecordsParams[order]{
-		Records: in,
-		ProcessRecord: func(o order) {
-			o.Status = filled
-			out <- o
-		},
-		OnComplete: func() { close(out) },
-	})
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go processRecords(processRecordsParams[order]{
+			Records: in,
+			ProcessRecord: func(o order) {
+				o.Status = filled
+				fmt.Printf("order filled: %v\n", o)
+			},
+			OnComplete: wg.Done,
+		})
+	}
 
-	return out
+	return &wg
 }
 
 type processRecordsParams[TRecord any] struct {

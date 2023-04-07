@@ -10,7 +10,7 @@ type order struct {
 
 func (o order) String() string {
 	return fmt.Sprintf(
-		"ProductCode: %v, Quantity: %v, Status: %v\n",
+		"ProductCode: %v, Quantity: %v, Status: %v",
 		o.ProductCode, o.Quantity, orderStatusToString(o.Status),
 	)
 }
