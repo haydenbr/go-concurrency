@@ -19,13 +19,26 @@ func main() {
 
 	receiveOrdersChan, _ := receiveOrders(rawOrders)
 	validOrderChan, invalidOrderChan := validateOrders(receiveOrdersChan)
+	reservedOrderChan := reserveInventory(validOrderChan)
 
-	wg.Add(1)
-	processOrders(processOrdersParams{
-		ValidOrderChan:   validOrderChan,
-		InvalidOrderChan: invalidOrderChan,
-		OnComplete:       func() { wg.Done() },
+	wg.Add(2)
+
+	go processRecords(processRecordsParams[order]{
+		Records: reservedOrderChan,
+		ProcessRecord: func(o order) {
+			fmt.Printf("reserved order received: %v\n", o)
+		},
+		OnComplete: wg.Done,
 	})
+
+	go processRecords(processRecordsParams[invalidOrder]{
+		Records: invalidOrderChan,
+		ProcessRecord: func(o invalidOrder) {
+			fmt.Printf("invalid order received: %v, error: %v\n", o.order, o.err)
+		},
+		OnComplete: wg.Done,
+	})
+
 	wg.Wait()
 }
 
@@ -71,29 +84,29 @@ func validateOrders(inChan <-chan order) (<-chan order, <-chan invalidOrder) {
 	return validOrderChan, invalidOrderChan
 }
 
-type processOrdersParams struct {
-	ValidOrderChan   <-chan order
-	InvalidOrderChan <-chan invalidOrder
-	OnComplete       func()
+func reserveInventory(in <-chan order) <-chan order {
+	out := make(chan order)
+
+	go func() {
+		for o := range in {
+			o.Status = reserved
+			out <- o
+		}
+		close(out)
+	}()
+
+	return out
 }
 
-func processOrders(params processOrdersParams) {
-loop:
-	for {
-		select {
-		case order, ok := <-params.ValidOrderChan:
-			if ok {
-				fmt.Printf("valid order received: %v\n", order)
-			} else {
-				break loop
-			}
-		case invalidOrder, ok := <-params.InvalidOrderChan:
-			if ok {
-				fmt.Printf("inalid order received: %v, error: %v\n", invalidOrder.order, invalidOrder.err)
-			} else {
-				break loop
-			}
-		}
+type processRecordsParams[TRecord any] struct {
+	Records       <-chan TRecord
+	ProcessRecord func(order TRecord)
+	OnComplete    func()
+}
+
+func processRecords[TRecord any](params processRecordsParams[TRecord]) {
+	for record := range params.Records {
+		params.ProcessRecord(record)
 	}
 
 	params.OnComplete()
