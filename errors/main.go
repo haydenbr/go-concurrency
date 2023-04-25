@@ -3,11 +3,12 @@ package main
 import (
 	"log"
 	"os"
-	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
-	waitGroup([]string{
+	processFiles([]string{
 		"text1.txt",
 		"text2.txt",
 		"text3.txt",
@@ -15,23 +16,24 @@ func main() {
 	})
 }
 
-func waitGroup(files []string) {
-	var wg sync.WaitGroup
+func processFiles(files []string) {
+	var wg = errgroup.Group{}
 
 	for _, file := range files {
 		path := file
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
 
+		wg.Go(func() error {
 			data, err := os.ReadFile(path)
 			if err != nil {
-				log.Print(err)
-			} else {
-				log.Print(string(data))
+				return err
 			}
-		}()
+
+			log.Print(string(data))
+			return nil
+		})
 	}
 
-	wg.Wait()
+	if err := wg.Wait(); err != nil {
+		log.Print(err)
+	}
 }
